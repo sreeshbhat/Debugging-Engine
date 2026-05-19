@@ -1,10 +1,5 @@
 from typing import Any
 
-import cohere
-import google.generativeai as genai
-from groq import Groq
-from openai import OpenAI
-
 from utils.helpers import get_secret
 
 
@@ -97,6 +92,8 @@ class LLMService:
 
     @staticmethod
     def _generate_with_gemini(prompt: str, api_key_override: str | None = None) -> str:
+        import google.generativeai as genai
+
         api_key = api_key_override or get_secret("GEMINI_API_KEY")
         if not api_key:
             raise ValueError("GEMINI_API_KEY is not configured.")
@@ -108,6 +105,8 @@ class LLMService:
 
     @staticmethod
     def _generate_with_groq(prompt: str, api_key_override: str | None = None) -> str:
+        from groq import Groq
+
         api_key = api_key_override or get_secret("GROQ_API_KEY")
         if not api_key:
             raise ValueError("GROQ_API_KEY is not configured.")
@@ -128,6 +127,8 @@ class LLMService:
 
     @staticmethod
     def _generate_with_openai(prompt: str, api_key_override: str | None = None) -> str:
+        from openai import OpenAI
+
         api_key = api_key_override or get_secret("OPENAI_API_KEY")
         if not api_key:
             raise ValueError("OPENAI_API_KEY is not configured.")
@@ -148,6 +149,8 @@ class LLMService:
 
     @staticmethod
     def _generate_with_cohere(prompt: str, api_key_override: str | None = None) -> str:
+        import cohere
+
         api_key = api_key_override or get_secret("COHERE_API_KEY")
         if not api_key:
             raise ValueError("COHERE_API_KEY is not configured.")
