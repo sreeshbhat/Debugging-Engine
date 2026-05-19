@@ -7,8 +7,8 @@ BugFix Prompt Arena is a Streamlit practice app for AI-assisted debugging. Stude
 - Student entry gate with required name and roll number before starting
 - Gamified scoring with badges, grade display, progress bar, leaderboard, and attempt history
 - Teacher-only controls for revealing the hidden fix, viewing all submissions, and exporting CSV
-- Automatic load splitting across configured Gemini, Groq, and Cohere API keys
-- Manual provider override from the sidebar when needed
+- Automatic load splitting across configured Gemini, Groq, OpenAI, and Cohere API keys
+- Sidebar support for session-only Gemini, Groq, and OpenAI API key overrides
 - MongoDB storage with local JSON fallback
 
 ## Project Structure
@@ -56,6 +56,7 @@ Use `.env` locally or `st.secrets` on Streamlit Community Cloud:
 ```env
 GEMINI_API_KEY=your_gemini_api_key
 GROQ_API_KEY=your_groq_api_key
+OPENAI_API_KEY=your_openai_api_key
 COHERE_API_KEY=your_cohere_api_key
 MONGODB_URI=mongodb://localhost:27017
 TEACHER_PASSWORD=admin123
@@ -64,6 +65,7 @@ TEACHER_PASSWORD=admin123
 Notes:
 
 - If more than one provider key is configured, `Auto Balanced` mode hash-splits students across providers to reduce rate-limit pressure.
+- Users can enter their own Gemini, Groq, or OpenAI key in the sidebar for the current browser session without changing stored server configuration.
 - If no MongoDB connection works, the app stores results in `storage/results.json`.
 - If `TEACHER_PASSWORD` is missing, the default password is `admin123`.
 

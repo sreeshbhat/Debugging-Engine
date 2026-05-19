@@ -33,6 +33,9 @@ def init_session_state() -> None:
     st.session_state.setdefault("prompt_input", "")
     st.session_state.setdefault("show_improved_prompt", False)
     st.session_state.setdefault("reveal_actual_fix", False)
+    st.session_state.setdefault("gemini_api_key_input", "")
+    st.session_state.setdefault("groq_api_key_input", "")
+    st.session_state.setdefault("openai_api_key_input", "")
 
 
 def apply_theme() -> None:
@@ -91,19 +94,40 @@ def unlock_teacher_mode() -> bool:
     return st.session_state.teacher_unlocked
 
 
-def render_sidebar(challenges: list[dict], repository: SubmissionRepository) -> tuple[str, bool]:
+def get_api_key_overrides() -> dict[str, str]:
+    overrides = {}
+    if st.session_state.gemini_api_key_input.strip():
+        overrides["Gemini"] = st.session_state.gemini_api_key_input.strip()
+    if st.session_state.groq_api_key_input.strip():
+        overrides["Groq"] = st.session_state.groq_api_key_input.strip()
+    if st.session_state.openai_api_key_input.strip():
+        overrides["OpenAI"] = st.session_state.openai_api_key_input.strip()
+    return overrides
+
+
+def render_sidebar(
+    challenges: list[dict],
+    repository: SubmissionRepository,
+) -> tuple[str, bool, dict[str, str]]:
     st.sidebar.title("Arena Settings")
 
+    with st.sidebar.expander("Session API Keys", expanded=False):
+        st.caption("These override server keys only for your current session.")
+        st.text_input("Gemini API key", type="password", key="gemini_api_key_input")
+        st.text_input("Groq API key", type="password", key="groq_api_key_input")
+        st.text_input("OpenAI API key", type="password", key="openai_api_key_input")
+
+    api_key_overrides = get_api_key_overrides()
     provider_mode = st.sidebar.selectbox(
         "Scoring provider mode",
-        ["Auto Balanced", "Gemini", "Groq", "Cohere"],
+        ["Auto Balanced", "Gemini", "Groq", "OpenAI"],
     )
-    provider_details = LLMService.get_provider_details(provider_mode)
+    provider_details = LLMService.get_provider_details(provider_mode, api_key_overrides)
     st.sidebar.caption(
         f"Route: `{provider_details['provider']}` | Backing model(s): `{provider_details['model']}`"
     )
     if provider_mode == "Auto Balanced":
-        configured = LLMService.configured_providers()
+        configured = LLMService.configured_providers(api_key_overrides)
         if configured:
             st.sidebar.caption("Configured providers: " + ", ".join(configured))
         else:
@@ -142,7 +166,7 @@ def render_sidebar(challenges: list[dict], repository: SubmissionRepository) -> 
         reset_attempt_state()
         st.rerun()
 
-    return provider_mode, is_teacher
+    return provider_mode, is_teacher, api_key_overrides
 
 
 def _selected_challenge_index(challenges: list[dict]) -> int:
@@ -204,13 +228,17 @@ def render_home() -> None:
         st.rerun()
 
 
-def resolve_provider(provider_mode: str, challenge_id: str) -> str:
+def resolve_provider(
+    provider_mode: str,
+    challenge_id: str,
+    api_key_overrides: dict[str, str],
+) -> str:
     if provider_mode != "Auto Balanced":
-        if not LLMService.provider_has_key(provider_mode):
+        if not LLMService.provider_has_key(provider_mode, api_key_overrides):
             raise ValueError(f"{provider_mode} is selected but its API key is missing.")
         return provider_mode
 
-    configured = LLMService.configured_providers()
+    configured = LLMService.configured_providers(api_key_overrides)
     return deterministic_provider_bucket(st.session_state.student_roll, challenge_id, configured)
 
 
@@ -219,6 +247,7 @@ def render_challenge(
     provider_mode: str,
     is_teacher: bool,
     repository: SubmissionRepository,
+    api_key_overrides: dict[str, str],
 ) -> None:
     st.title("BugFix Prompt Arena")
     st.caption(f"{challenge['difficulty']} | {challenge['category']}")
@@ -226,7 +255,7 @@ def render_challenge(
 
     assigned_provider = "Unavailable"
     try:
-        assigned_provider = resolve_provider(provider_mode, challenge["id"])
+        assigned_provider = resolve_provider(provider_mode, challenge["id"], api_key_overrides)
     except Exception as exc:
         st.warning(str(exc))
 
@@ -291,6 +320,7 @@ def render_challenge(
                 provider_mode=provider_mode,
                 is_teacher=is_teacher,
                 repository=repository,
+                api_key_overrides=api_key_overrides,
             )
             st.session_state.last_result = result
 
@@ -313,6 +343,7 @@ def handle_submission(
     provider_mode: str,
     is_teacher: bool,
     repository: SubmissionRepository,
+    api_key_overrides: dict[str, str],
 ) -> dict:
     if not st.session_state.student_name.strip():
         st.error("Please enter the arena using your name before submitting.")
@@ -327,7 +358,7 @@ def handle_submission(
         return {}
 
     try:
-        provider = resolve_provider(provider_mode, challenge["id"])
+        provider = resolve_provider(provider_mode, challenge["id"], api_key_overrides)
     except Exception as exc:
         st.error(str(exc))
         return {}
@@ -339,6 +370,7 @@ def handle_submission(
                 student_prompt=prompt_text,
                 provider=provider,
                 teacher_mode=is_teacher,
+                api_key_overrides=api_key_overrides,
             )
         except Exception as exc:
             st.warning(
@@ -495,7 +527,7 @@ def main() -> None:
 
     challenges = load_challenges(CHALLENGES_PATH)
     repository = get_repository()
-    provider_mode, is_teacher = render_sidebar(challenges, repository)
+    provider_mode, is_teacher, api_key_overrides = render_sidebar(challenges, repository)
     if not challenges:
         st.title("BugFix Prompt Arena")
         st.error(
@@ -511,7 +543,13 @@ def main() -> None:
             (challenge for challenge in challenges if challenge["id"] == selected_id),
             challenges[0],
         )
-        render_challenge(current_challenge, provider_mode, is_teacher, repository)
+        render_challenge(
+            current_challenge,
+            provider_mode,
+            is_teacher,
+            repository,
+            api_key_overrides,
+        )
 
     submissions = repository.fetch_submissions()
     render_leaderboard(submissions)

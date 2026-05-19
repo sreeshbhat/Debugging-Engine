@@ -113,9 +113,10 @@ def evaluate_student_prompt(
     student_prompt: str,
     provider: str,
     teacher_mode: bool = False,
+    api_key_overrides: dict[str, str] | None = None,
 ) -> dict[str, Any]:
     prompt = build_evaluation_prompt(challenge, student_prompt, teacher_mode)
-    raw_response = LLMService.generate(provider, prompt)
+    raw_response = LLMService.generate(provider, prompt, api_key_overrides=api_key_overrides)
     parsed = parse_json_response(raw_response)
     return normalize_score_payload(parsed)
 

@@ -3,6 +3,7 @@ from typing import Any
 import cohere
 import google.generativeai as genai
 from groq import Groq
+from openai import OpenAI
 
 from utils.helpers import get_secret
 
@@ -11,49 +12,64 @@ class LLMService:
     GEMINI_MODEL = "gemini-1.5-flash"
     GROQ_MODEL = "llama-3.1-8b-instant"
     COHERE_MODEL = "command-r"
+    OPENAI_MODEL = "gpt-4o-mini"
 
     @staticmethod
-    def configured_providers() -> list[str]:
+    def configured_providers(api_key_overrides: dict[str, str] | None = None) -> list[str]:
         providers = []
-        if get_secret("GEMINI_API_KEY"):
-            providers.append("Gemini")
-        if get_secret("GROQ_API_KEY"):
-            providers.append("Groq")
-        if get_secret("COHERE_API_KEY"):
-            providers.append("Cohere")
+        for provider in ["Gemini", "Groq", "OpenAI", "Cohere"]:
+            if LLMService.provider_has_key(provider, api_key_overrides):
+                providers.append(provider)
         return providers
 
     @staticmethod
-    def provider_has_key(provider: str) -> bool:
+    def provider_has_key(
+        provider: str,
+        api_key_overrides: dict[str, str] | None = None,
+    ) -> bool:
+        api_key_overrides = api_key_overrides or {}
+
         if provider == "Gemini":
-            return bool(get_secret("GEMINI_API_KEY"))
+            return bool(api_key_overrides.get("Gemini") or get_secret("GEMINI_API_KEY"))
         if provider == "Groq":
-            return bool(get_secret("GROQ_API_KEY"))
+            return bool(api_key_overrides.get("Groq") or get_secret("GROQ_API_KEY"))
+        if provider == "OpenAI":
+            return bool(api_key_overrides.get("OpenAI") or get_secret("OPENAI_API_KEY"))
         if provider == "Cohere":
-            return bool(get_secret("COHERE_API_KEY"))
+            return bool(api_key_overrides.get("Cohere") or get_secret("COHERE_API_KEY"))
         return False
 
     @staticmethod
-    def get_provider_details(provider: str) -> dict[str, Any]:
+    def get_provider_details(
+        provider: str,
+        api_key_overrides: dict[str, str] | None = None,
+    ) -> dict[str, Any]:
         if provider == "Gemini":
             return {
-                "provider": provider,
+                "provider": "Gemini",
                 "model": LLMService.GEMINI_MODEL,
-                "configured": LLMService.provider_has_key(provider),
+                "configured": LLMService.provider_has_key("Gemini", api_key_overrides),
             }
-        return {
-            "provider": "Groq",
+        if provider == "Groq":
+            return {
+                "provider": "Groq",
                 "model": LLMService.GROQ_MODEL,
-                "configured": LLMService.provider_has_key("Groq"),
+                "configured": LLMService.provider_has_key("Groq", api_key_overrides),
+            }
+        if provider == "OpenAI":
+            return {
+                "provider": "OpenAI",
+                "model": LLMService.OPENAI_MODEL,
+                "configured": LLMService.provider_has_key("OpenAI", api_key_overrides),
             }
         if provider == "Cohere":
             return {
                 "provider": "Cohere",
                 "model": LLMService.COHERE_MODEL,
-                "configured": LLMService.provider_has_key("Cohere"),
+                "configured": LLMService.provider_has_key("Cohere", api_key_overrides),
             }
         if provider == "Auto Balanced":
-            providers = LLMService.configured_providers()
+            providers = LLMService.configured_providers(api_key_overrides)
             return {
                 "provider": "Auto Balanced",
                 "model": ", ".join(providers) if providers else "None configured",
@@ -62,18 +78,26 @@ class LLMService:
         raise ValueError(f"Unsupported provider: {provider}")
 
     @staticmethod
-    def generate(provider: str, prompt: str) -> str:
+    def generate(
+        provider: str,
+        prompt: str,
+        api_key_overrides: dict[str, str] | None = None,
+    ) -> str:
+        api_key_overrides = api_key_overrides or {}
+
         if provider == "Gemini":
-            return LLMService._generate_with_gemini(prompt)
+            return LLMService._generate_with_gemini(prompt, api_key_overrides.get("Gemini"))
         if provider == "Groq":
-            return LLMService._generate_with_groq(prompt)
+            return LLMService._generate_with_groq(prompt, api_key_overrides.get("Groq"))
+        if provider == "OpenAI":
+            return LLMService._generate_with_openai(prompt, api_key_overrides.get("OpenAI"))
         if provider == "Cohere":
-            return LLMService._generate_with_cohere(prompt)
+            return LLMService._generate_with_cohere(prompt, api_key_overrides.get("Cohere"))
         raise ValueError(f"Unsupported provider: {provider}")
 
     @staticmethod
-    def _generate_with_gemini(prompt: str) -> str:
-        api_key = get_secret("GEMINI_API_KEY")
+    def _generate_with_gemini(prompt: str, api_key_override: str | None = None) -> str:
+        api_key = api_key_override or get_secret("GEMINI_API_KEY")
         if not api_key:
             raise ValueError("GEMINI_API_KEY is not configured.")
 
@@ -83,8 +107,8 @@ class LLMService:
         return getattr(response, "text", "") or ""
 
     @staticmethod
-    def _generate_with_groq(prompt: str) -> str:
-        api_key = get_secret("GROQ_API_KEY")
+    def _generate_with_groq(prompt: str, api_key_override: str | None = None) -> str:
+        api_key = api_key_override or get_secret("GROQ_API_KEY")
         if not api_key:
             raise ValueError("GROQ_API_KEY is not configured.")
 
@@ -103,8 +127,28 @@ class LLMService:
         return response.choices[0].message.content or ""
 
     @staticmethod
-    def _generate_with_cohere(prompt: str) -> str:
-        api_key = get_secret("COHERE_API_KEY")
+    def _generate_with_openai(prompt: str, api_key_override: str | None = None) -> str:
+        api_key = api_key_override or get_secret("OPENAI_API_KEY")
+        if not api_key:
+            raise ValueError("OPENAI_API_KEY is not configured.")
+
+        client = OpenAI(api_key=api_key)
+        response = client.chat.completions.create(
+            model=LLMService.OPENAI_MODEL,
+            temperature=0.2,
+            messages=[
+                {
+                    "role": "system",
+                    "content": "You return only valid JSON and never wrap it in markdown.",
+                },
+                {"role": "user", "content": prompt},
+            ],
+        )
+        return response.choices[0].message.content or ""
+
+    @staticmethod
+    def _generate_with_cohere(prompt: str, api_key_override: str | None = None) -> str:
+        api_key = api_key_override or get_secret("COHERE_API_KEY")
         if not api_key:
             raise ValueError("COHERE_API_KEY is not configured.")
 
